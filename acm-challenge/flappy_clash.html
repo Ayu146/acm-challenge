@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flappy Clash - Fix the Bugs!</title>
+<style>
+  body {
+    background: #0f2027;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'Trebuchet MS', sans-serif;
+    color: #fff;
+  }
+  h1 { color: #ffd700; margin-top: 20px; letter-spacing: 1px; }
+  canvas {
+    background: linear-gradient(#4ec0e8, #a8e6cf);
+    border: 4px solid #ffd700;
+    border-radius: 6px;
+    margin-top: 10px;
+    cursor: pointer;
+  }
+  #info {
+    margin-top: 10px;
+    font-size: 20px;
+  }
+  #status {
+    margin-top: 8px;
+    font-size: 22px;
+    color: #ffd700;
+    height: 26px;
+  }
+  #restartBtn {
+    margin-top: 8px;
+    padding: 8px 20px;
+    font-size: 16px;
+    background: #ffd700;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: none;
+  }
+  #hint {
+    margin-top: 6px;
+    font-size: 14px;
+    color: #ccc;
+  }
+</style>
+</head>
+<body>
+
+<h1>🐦 FLAPPY CLASH 🐦 (find & fix the bugs!)</h1>
+<canvas id="gameCanvas" width="400" height="500"></canvas>
+<div id="info">Score: <span id="score">0</span></div>
+<div id="hint">Click canvas or press Space to flap</div>
+<div id="status"></div>
+<button id="restartBtn">Restart</button>
+
+<script>
+// =====================================================
+//  ACM CHALLENGE - FLAPPY CLASH
+//  This game has several intentional bugs.
+//  Find them, fix them, then add your own twist
+//  (new pipe patterns, power-ups, skins, etc.)
+// =====================================================
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+let bird = {
+  x: 80,
+  y: 250,
+  radius: 14,
+  velocity: 0
+};
+
+const GRAVITY = 0.5;
+const FLAP_STRENGTH = -8;
+
+let pipes = [];
+const PIPE_WIDTH = 50;
+const PIPE_GAP = 130;
+const PIPE_SPEED = 2.5;
+let frameCount = 0;
+const PIPE_SPAWN_INTERVAL = 90; // frames
+
+let score = 0;
+let gameRunning = true;
+let animationId;
+
+function flap() {
+  if (!gameRunning) return;
+  // BUG: flap should set velocity, but this adds gravity instead,
+  // making the bird barely respond to clicks
+  bird.velocity += GRAVITY;
+}
+
+canvas.addEventListener("click", flap);
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space") {
+    e.preventDefault();
+    flap();
+  }
+});
+
+function spawnPipe() {
+  const minTop = 50;
+  const maxTop = canvas.height - PIPE_GAP - 50;
+  const topHeight = Math.random() * (maxTop - minTop) + minTop;
+  pipes.push({
+    x: canvas.width,
+    topHeight: topHeight,
+    passed: false
+  });
+}
+
+function updateBird() {
+  bird.velocity += GRAVITY;
+  bird.y += bird.velocity;
+
+  // Ceiling collision
+  if (bird.y - bird.radius < 0) {
+    bird.y = bird.radius;
+    bird.velocity = 0;
+  }
+
+  // Floor collision
+  if (bird.y + bird.radius > canvas.height) {
+    endGame();
+  }
+}
+
+function updatePipes() {
+  frameCount++;
+  if (frameCount % PIPE_SPAWN_INTERVAL === 0) {
+    spawnPipe();
+  }
+
+  for (let pipe of pipes) {
+    pipe.x -= PIPE_SPEED;
+
+    // Score when bird passes pipe
+    // BUG: passes check compares against wrong x (pipe.x itself, not
+    // accounting for pipe width), so score triggers too early/inconsistently
+    if (!pipe.passed && pipe.x < bird.x) {
+      pipe.passed = true;
+      score++;
+      document.getElementById("score").textContent = score;
+    }
+
+    // Collision detection with pipe
+    let birdLeft = bird.x - bird.radius;
+    let birdRight = bird.x + bird.radius;
+    let birdTop = bird.y - bird.radius;
+    let birdBottom = bird.y + bird.radius;
+
+    let pipeLeft = pipe.x;
+    let pipeRight = pipe.x + PIPE_WIDTH;
+
+    if (birdRight > pipeLeft && birdLeft < pipeRight) {
+      // BUG: gap check uses OR instead of proper logic, so the bird
+      // is considered "safe" way too often even when it should die
+      if (birdTop < pipe.topHeight || birdBottom > pipe.topHeight + PIPE_GAP) {
+        // should end game here, but nothing happens
+      }
+    }
+  }
+
+  // Remove off-screen pipes
+  pipes = pipes.filter(p => p.x + PIPE_WIDTH > 0);
+}
+
+function drawBird() {
+  ctx.beginPath();
+  ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffd700";
+  ctx.fill();
+  ctx.strokeStyle = "#333";
+  ctx.stroke();
+  ctx.closePath();
+}
+
+function drawPipes() {
+  ctx.fillStyle = "#2d5028";
+  for (let pipe of pipes) {
+    // Top pipe
+    ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
+    // Bottom pipe
+    ctx.fillRect(
+      pipe.x,
+      pipe.topHeight + PIPE_GAP,
+      PIPE_WIDTH,
+      canvas.height - (pipe.topHeight + PIPE_GAP)
+    );
+  }
+}
+
+function endGame() {
+  gameRunning = false;
+  cancelAnimationFrame(animationId);
+  document.getElementById("status").textContent = `💀 GAME OVER — Score: ${score} 💀`;
+  document.getElementById("restartBtn").style.display = "inline-block";
+}
+
+function gameLoop() {
+  if (!gameRunning) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  updateBird();
+  updatePipes();
+
+  drawPipes();
+  drawBird();
+
+  animationId = requestAnimationFrame(gameLoop);
+}
+
+document.getElementById("restartBtn").addEventListener("click", () => {
+  location.reload();
+});
+
+animationId = requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
